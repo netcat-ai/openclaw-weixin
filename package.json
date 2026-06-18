@@ -11,6 +11,7 @@
     "!src/**/node_modules/",
     "index.ts",
     "openclaw.plugin.json",
+    "npm-shrinkwrap.json",
     "dist/",
     "README.md",
     "README.zh_CN.md",
