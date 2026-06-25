@@ -20,6 +20,7 @@ export async function applyWeixinMessageSendingHook(params: {
   text: string;
   accountId?: string;
   mediaUrl?: string;
+  runId?: string;
 }): Promise<{ cancelled: boolean; text: string }> {
   const hookRunner = getGlobalHookRunner();
   if (!hookRunner?.hasHooks("message_sending")) {
@@ -33,6 +34,7 @@ export async function applyWeixinMessageSendingHook(params: {
         metadata: {
           channel: CHANNEL_ID,
           accountId: params.accountId,
+          runId: params.runId,
           ...(params.mediaUrl ? { mediaUrls: [params.mediaUrl] } : {}),
         },
       },
@@ -60,6 +62,7 @@ export function emitWeixinMessageSent(params: {
   success: boolean;
   error?: string;
   accountId?: string;
+  runId?: string;
 }): void {
   const hookRunner = getGlobalHookRunner();
   if (!hookRunner?.hasHooks("message_sent")) return;
@@ -71,6 +74,7 @@ export function emitWeixinMessageSent(params: {
     channelId: CHANNEL_ID,
     accountId: params.accountId,
     conversationId: params.to,
+    runId: params.runId,
   });
   fireAndForgetHook(
     Promise.resolve(

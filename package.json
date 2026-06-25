@@ -1,6 +1,6 @@
 {
   "name": "@tencent-weixin/openclaw-weixin",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "OpenClaw Weixin channel",
   "license": "MIT",
   "author": "Tencent",
@@ -11,7 +11,6 @@
     "!src/**/node_modules/",
     "index.ts",
     "openclaw.plugin.json",
-    "npm-shrinkwrap.json",
     "dist/",
     "README.md",
     "README.zh_CN.md",

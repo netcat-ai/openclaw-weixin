@@ -96,11 +96,8 @@ export async function monitorWeixinProvider(opts: MonitorWeixinOpts): Promise<vo
         token,
         get_updates_buf: getUpdatesBuf,
         timeoutMs: nextTimeoutMs,
-        // Plumb the gateway's abort signal into the underlying fetch so a
-        // channel hot reload terminates the in-flight long-poll within ms
-        // (instead of waiting up to ~35s for the long-poll timeout). Without
-        // this, the gateway's channel-stop 5s budget is exceeded and the
-        // subsequent restart is skipped, leaving the Monitor stopped (#141).
+        // Stop/hot-reload should cancel the in-flight long-poll immediately
+        // instead of waiting for the server-side long-poll timeout.
         abortSignal,
       });
       aLog.debug(

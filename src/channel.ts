@@ -167,7 +167,13 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
     schema: {
       type: "object",
       additionalProperties: false,
-      properties: {},
+      properties: {
+        replyProgressMessages: {
+          type: "boolean",
+          default: true,
+          description: "Send structured tool-call progress messages.",
+        },
+      },
     },
   },
   capabilities: {

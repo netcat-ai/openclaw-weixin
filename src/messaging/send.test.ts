@@ -36,10 +36,12 @@ vi.mock("openclaw/plugin-sdk", () => ({
 
 import {
   sendMessageWeixin,
+  sendMessageItemWeixin,
   sendImageMessageWeixin,
   sendVideoMessageWeixin,
   sendFileMessageWeixin,
 } from "./send.js";
+import { MessageItemType } from "../api/types.js";
 import type { UploadedFileInfo } from "../cdn/upload.js";
 
 beforeEach(() => {
@@ -70,6 +72,17 @@ describe("sendMessageWeixin", () => {
     expect(callArgs.body.msg.context_token).toBe("ctx");
   });
 
+  it("includes run_id when provided", async () => {
+    mockSendMessageApi.mockResolvedValueOnce(undefined);
+    await sendMessageWeixin({
+      to: "user1",
+      text: "hello",
+      opts: { baseUrl: "https://api.com", contextToken: "ctx", runId: "run-1" },
+    });
+    const callArgs = mockSendMessageApi.mock.calls[0][0];
+    expect(callArgs.body.msg.run_id).toBe("run-1");
+  });
+
   it("sends message with empty text (no item_list)", async () => {
     mockSendMessageApi.mockResolvedValueOnce(undefined);
     const result = await sendMessageWeixin({
@@ -91,6 +104,36 @@ describe("sendMessageWeixin", () => {
         opts: { baseUrl: "https://api.com", contextToken: "ctx" },
       }),
     ).rejects.toThrow("api fail");
+  });
+});
+
+describe("sendMessageItemWeixin", () => {
+  it("sends structured message item with run_id", async () => {
+    mockSendMessageApi.mockResolvedValueOnce(undefined);
+    await sendMessageItemWeixin({
+      to: "user1",
+      item: {
+        type: MessageItemType.TOOL_CALL_START,
+        is_completed: false,
+        tool_call_start_item: {
+          tool_name: "read",
+          tool_call_id: "tool:call-1",
+        },
+      },
+      opts: { baseUrl: "https://api.com", contextToken: "ctx", runId: "run-1" },
+    });
+    const callArgs = mockSendMessageApi.mock.calls[0][0];
+    expect(callArgs.body.msg.run_id).toBe("run-1");
+    expect(callArgs.body.msg.item_list).toEqual([
+      {
+        type: MessageItemType.TOOL_CALL_START,
+        is_completed: false,
+        tool_call_start_item: {
+          tool_name: "read",
+          tool_call_id: "tool:call-1",
+        },
+      },
+    ]);
   });
 });
 
@@ -136,6 +179,19 @@ describe("sendImageMessageWeixin", () => {
     });
     expect(result.messageId).toBeDefined();
     expect(mockSendMessageApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("includes run_id on media caption and item sends", async () => {
+    mockSendMessageApi.mockResolvedValue(undefined);
+    await sendImageMessageWeixin({
+      to: "user1",
+      text: "caption",
+      uploaded: makeUploadedFileInfo(),
+      opts: { baseUrl: "https://api.com", contextToken: "ctx", runId: "run-media" },
+    });
+    expect(mockSendMessageApi).toHaveBeenCalledTimes(2);
+    expect(mockSendMessageApi.mock.calls[0][0].body.msg.run_id).toBe("run-media");
+    expect(mockSendMessageApi.mock.calls[1][0].body.msg.run_id).toBe("run-media");
   });
 
   it("sends image message without caption (single call)", async () => {

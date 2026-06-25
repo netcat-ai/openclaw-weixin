@@ -99,19 +99,15 @@ describe("getUpdates", () => {
     expect(url).toContain("https://api.example.com/ilink/bot/getupdates");
   });
 
-  // Regression test for #141: when the gateway aborts the channel (e.g. during a
-  // config hot reload), the in-flight long-poll must be cancelled immediately
-  // so the monitor loop can exit within the gateway's 5s channel-stop budget.
   it("forwards external abortSignal to the underlying fetch", async () => {
     let receivedSignal: AbortSignal | undefined;
     mockFetch.mockImplementationOnce((_url: string, opts: RequestInit) => {
       receivedSignal = opts.signal as AbortSignal;
       return new Promise<Response>((_resolve, reject) => {
-        // Mimic a long-poll: only resolve/reject when the signal aborts.
         opts.signal?.addEventListener("abort", () => {
-          const e: Error & { name: string } = new Error("aborted");
-          e.name = "AbortError";
-          reject(e);
+          const err = new Error("aborted");
+          err.name = "AbortError";
+          reject(err);
         });
       });
     });
@@ -123,8 +119,7 @@ describe("getUpdates", () => {
       timeoutMs: 60_000,
       abortSignal: external.signal,
     });
-    // Give the fetch a tick to register, then abort externally.
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     external.abort();
     const result = await pending;
 
@@ -137,9 +132,9 @@ describe("getUpdates", () => {
     let receivedSignal: AbortSignal | undefined;
     mockFetch.mockImplementationOnce((_url: string, opts: RequestInit) => {
       receivedSignal = opts.signal as AbortSignal;
-      const e: Error & { name: string } = new Error("aborted");
-      e.name = "AbortError";
-      return Promise.reject(e);
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      return Promise.reject(err);
     });
 
     const external = new AbortController();
@@ -148,6 +143,7 @@ describe("getUpdates", () => {
       baseUrl: "https://api.example.com",
       abortSignal: external.signal,
     });
+
     expect(receivedSignal?.aborted).toBe(true);
     expect(result.ret).toBe(0);
   });

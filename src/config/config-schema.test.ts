@@ -6,6 +6,7 @@ describe("WeixinConfigSchema", () => {
     const result = WeixinConfigSchema.parse({});
     expect(result.baseUrl).toBe("https://ilinkai.weixin.qq.com");
     expect(result.cdnBaseUrl).toBe("https://novac2c.cdn.weixin.qq.com/c2c");
+    expect(result.replyProgressMessages).toBe(true);
   });
 
   it("accepts custom baseUrl and cdnBaseUrl", () => {
@@ -24,6 +25,13 @@ describe("WeixinConfigSchema", () => {
     });
     expect(result.name).toBe("my-bot");
     expect(result.enabled).toBe(false);
+  });
+
+  it("accepts disabling reply progress messages", () => {
+    const result = WeixinConfigSchema.parse({
+      replyProgressMessages: false,
+    });
+    expect(result.replyProgressMessages).toBe(false);
   });
 
   it("accepts accounts map", () => {

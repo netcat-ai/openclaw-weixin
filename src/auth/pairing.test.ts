@@ -16,7 +16,7 @@ const mockWithFileLock = vi.hoisted(() =>
   vi.fn(async (_path: string, _opts: unknown, fn: () => Promise<unknown>) => fn()),
 );
 
-vi.mock("openclaw/plugin-sdk/infra-runtime", () => ({
+vi.mock("openclaw/plugin-sdk", () => ({
   withFileLock: mockWithFileLock,
 }));
 
