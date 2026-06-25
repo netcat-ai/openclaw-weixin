@@ -36,6 +36,7 @@ import {
   sendTyping,
   sanitizeBotAgent,
   readPackageJsonFromDir,
+  classifyFetchError,
 } from "./api.js";
 
 function mockResponse(body: object | string, status = 200, ok = true): Response {
@@ -175,7 +176,7 @@ describe("getUploadUrl", () => {
 
 describe("sendMessage", () => {
   it("succeeds on ok response", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve("") } as Response);
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, text: () => Promise.resolve("{}") } as Response);
     await expect(
       sendMessage({ baseUrl: "https://api.example.com/", body: { msg: { to_user_id: "u" } } }),
     ).resolves.toBeUndefined();
@@ -402,5 +403,105 @@ describe("readPackageJsonFromDir", () => {
 
     const result = readPackageJsonFromDir(startDir);
     expect(result.ilink_appid).toBe("bot");
+  });
+});
+
+describe("classifyFetchError", () => {
+  it("classifies DNS resolution errors (ENOTFOUND)", () => {
+    const err = Object.assign(new Error("fetch failed"), {
+      cause: { code: "ENOTFOUND" },
+    });
+    expect(classifyFetchError(err)).toEqual({
+      type: "dns",
+      description: "DNS resolution failed, check DNS configuration",
+      code: "ENOTFOUND",
+    });
+  });
+
+  it("classifies EAI_AGAIN as dns", () => {
+    const err = Object.assign(new Error("fetch failed"), {
+      cause: { code: "EAI_AGAIN" },
+    });
+    const result = classifyFetchError(err);
+    expect(result.type).toBe("dns");
+    expect(result.code).toBe("EAI_AGAIN");
+  });
+
+  it("classifies getaddrinfo in message as dns", () => {
+    const err = new Error("getaddrinfo ENOTFOUND example.com");
+    const result = classifyFetchError(err);
+    expect(result.type).toBe("dns");
+    expect(result.code).toBeUndefined();
+  });
+
+  it("classifies TCP connection refused", () => {
+    const err = Object.assign(new Error("fetch failed"), {
+      cause: { code: "ECONNREFUSED" },
+    });
+    expect(classifyFetchError(err)).toEqual({
+      type: "tcp",
+      description: "TCP connection refused",
+      code: "ECONNREFUSED",
+    });
+  });
+
+  it("classifies TCP timeout / unreachable codes", () => {
+    for (const code of ["ETIMEDOUT", "ENETUNREACH", "EHOSTUNREACH"]) {
+      const err = Object.assign(new Error("fetch failed"), {
+        cause: { code },
+      });
+      const result = classifyFetchError(err);
+      expect(result.type).toBe("tcp");
+      expect(result.description).toBe("TCP connection timeout or unreachable");
+      expect(result.code).toBe(code);
+    }
+  });
+
+  it("classifies UND_ERR_CONNECT_TIMEOUT as tcp", () => {
+    const err = new Error("fetch failed");
+    (err as any).cause = "UND_ERR_CONNECT_TIMEOUT";
+    const result = classifyFetchError(err);
+    expect(result.type).toBe("tcp");
+    expect(result.code).toBe("UND_ERR_CONNECT_TIMEOUT");
+  });
+
+  it("classifies TLS handshake errors", () => {
+    for (const cause of [
+      "UND_ERR_SOCKET",
+      "ERR_SSL_PROTOCOL_ERROR",
+      "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    ]) {
+      const err = new Error("fetch failed");
+      (err as any).cause = cause;
+      const result = classifyFetchError(err);
+      expect(result.type).toBe("tls");
+      expect(result.code).toBe(cause);
+    }
+  });
+
+  it("classifies AbortError as timeout", () => {
+    const err = new Error("The operation was aborted");
+    err.name = "AbortError";
+    expect(classifyFetchError(err)).toEqual({
+      type: "timeout",
+      description: "request timeout",
+    });
+  });
+
+  it("returns unknown for unrecognized errors", () => {
+    const err = new Error("something unexpected");
+    expect(classifyFetchError(err)).toEqual({
+      type: "unknown",
+      description: "network request failed",
+    });
+  });
+
+  it("reads cause from err.cause when available", () => {
+    const err = Object.assign(new Error("fetch failed"), {
+      cause: "ETIMEDOUT",
+    });
+    const result = classifyFetchError(err);
+    expect(result.type).toBe("tcp");
+    expect(result.code).toBe("ETIMEDOUT");
   });
 });

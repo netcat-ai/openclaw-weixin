@@ -4,6 +4,40 @@
 
 This project follows the [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [2.4.5] - 2026-06-22
+
+### Added
+
+- **`classifyFetchError` — network error classification:** New `classifyFetchError` utility in `src/api/api.ts` classifies fetch-level errors into `dns` / `tcp` / `tls` / `timeout` / `unknown`. `apiGetFetch` and `apiPostFetch` now log structured error details (type, description, code) on failure, making network troubleshooting significantly easier. Includes full test coverage for ENOTFOUND, ECONNREFUSED, ETIMEDOUT, SSL/TLS, AbortError, and more.
+- **`sendMessage` response validation:** `sendMessage` now parses the server response (`SendMessageResp` with `ret` / `errmsg`) and throws on non-zero `ret`, preventing silent delivery failures.
+
+### Changed
+
+- **`SESSION_EXPIRED_ERRCODE` → `STALE_TOKEN_ERRCODE`:** Renamed in `src/api/session-guard.ts` to more accurately describe the token-stale condition (the error code -14 indicates a stale/expired token, not a session expiry). All references in `monitor.ts` and tests updated.
+- **Error logging improvements:**
+  - `getUpdates` errors in `monitor.ts` now include `classifyFetchError` classification (type, description, code).
+  - Removed duplicate `errLog` lines in `monitor.ts`; only `aLog.error` remains.
+  - CDN upload failure logs (`cdn-upload.ts`) now include redacted URL and error cause.
+  - `downloadRemoteImageToTemp` (`upload.ts`) now logs detailed fetch network errors with cause.
+  - API GET/POST fetch failures (`api.ts`) now log redacted URL, timeout, and error classification.
+- **Minimum host version bumped:** `peerDependencies.openclaw` and `install.minHostVersion` raised from `>=2026.3.22` to `>=2026.5.12`.
+
+### Added (Dev/Engineering)
+
+- **`outbound-hooks.test.ts`:** New test file covering `applyWeixinMessageSendingHook` (no hooks, content modification, cancellation, error recovery) and `emitWeixinMessageSent` (no hooks, success, failure with fire-and-forget) scenarios.
+
+### Fixed
+
+- **`pairing.test.ts` mock path:** `vi.mock` target corrected from `"openclaw/plugin-sdk"` to `"openclaw/plugin-sdk/infra-runtime"`.
+- **`api.test.ts` sendMessage mock response:** Success test case mock now returns `"{}"` instead of `""`, matching the updated `sendMessage` logic that parses the response body.
+
+## [2.4.4] - 2026-05-22
+
+### Added
+
+- **Tool-call progress messages:** `WeixinReplyProgressSender` sends `TOOL_CALL_START` / `TOOL_CALL_RESULT` progress messages when the model executes tools. Configurable via the `replyProgressMessages` channel option (default: `true`).
+- **Abort signal support for in-flight requests:** `apiPostFetch` / `getUpdates` now accept an external `AbortSignal`. When the gateway stops or hot-reloads a channel, the in-flight long-poll is cancelled immediately instead of waiting for the server-side timeout.
+
 ## [2.4.3] - 2026-05-08
 
 ### Fixed

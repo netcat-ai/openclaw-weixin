@@ -4,6 +4,40 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 格式。
 
+## [2.4.5] - 2026-06-22
+
+### 新增
+
+- **`classifyFetchError` — 网络错误分类：** `src/api/api.ts` 新增 `classifyFetchError` 工具函数，将 fetch 级错误分类为 `dns` / `tcp` / `tls` / `timeout` / `unknown`。`apiGetFetch` 与 `apiPostFetch` 在失败时输出结构化日志（type, description, code），便于排查网络问题。覆盖 ENOTFOUND、ECONNREFUSED、ETIMEDOUT、SSL/TLS、AbortError 等场景的完整测试。
+- **`sendMessage` 返回值校验：** `sendMessage` 现在解析服务端返回的 `SendMessageResp`（`ret` / `errmsg`），`ret` 非零时抛错，避免消息发送静默失败。
+
+### 变更
+
+- **`SESSION_EXPIRED_ERRCODE` → `STALE_TOKEN_ERRCODE`：** 在 `src/api/session-guard.ts` 中重命名，更准确地描述 token 过期（-14 表示 token 失效，而非 session 过期）。`monitor.ts` 与测试中所有引用同步更新。
+- **错误日志改进：**
+  - `monitor.ts` 中 `getUpdates` 的错误日志使用 `classifyFetchError` 输出分类信息（type, description, code）。
+  - `monitor.ts` 移除重复的 `errLog` 日志行，仅保留 `aLog.error`。
+  - CDN 上传失败日志（`cdn-upload.ts`）增加脱敏 URL 和错误 cause 信息。
+  - `downloadRemoteImageToTemp`（`upload.ts`）增加 fetch 网络错误详情日志。
+  - API GET/POST fetch 失败日志（`api.ts`）增加脱敏 URL、超时设置及错误分类信息。
+- **最低宿主版本升级：** `peerDependencies.openclaw` 和 `install.minHostVersion` 从 `>=2026.3.22` 升至 `>=2026.5.12`。
+
+### 新增（开发/工程）
+
+- **`outbound-hooks.test.ts`：** 新增测试文件，覆盖 `applyWeixinMessageSendingHook`（无 hook、内容修改、取消、错误容错）和 `emitWeixinMessageSent`（无 hook、成功、失败走 fire-and-forget）各场景。
+
+### 修复
+
+- **`pairing.test.ts` mock 路径：** `vi.mock` 目标从 `"openclaw/plugin-sdk"` 修正为 `"openclaw/plugin-sdk/infra-runtime"`。
+- **`api.test.ts` sendMessage 测试 mock：** 成功用例的 mock 返回值从 `""` 改为 `"{}"`，与 `sendMessage` 新增的响应解析逻辑一致。
+
+## [2.4.4] - 2026-05-22
+
+### 新增
+
+- **工具调用进度消息：** 模型执行 tool 时，发送 `TOOL_CALL_START` / `TOOL_CALL_RESULT` 进度消息，可通过 `replyProgressMessages` 开关控制（默认开启）。
+- **请求中断信号支持：** `apiPostFetch` / `getUpdates` 现在接受外部的 `AbortSignal`。当网关停止或热重载频道时，正在进行的 long-poll 请求会被立即取消，无需等待服务端超时。
+
 ## [2.4.3] - 2026-05-08
 
 ### 修复

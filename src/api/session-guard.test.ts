@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import {
-  SESSION_EXPIRED_ERRCODE,
+  STALE_TOKEN_ERRCODE,
   pauseSession,
   isSessionPaused,
   getRemainingPauseMs,
@@ -23,8 +23,8 @@ describe("session-guard", () => {
     vi.useRealTimers();
   });
 
-  it("exports SESSION_EXPIRED_ERRCODE as -14", () => {
-    expect(SESSION_EXPIRED_ERRCODE).toBe(-14);
+  it("exports STALE_TOKEN_ERRCODE as -14", () => {
+    expect(STALE_TOKEN_ERRCODE).toBe(-14);
   });
 
   it("isSessionPaused returns false when no pause set", () => {
@@ -73,7 +73,7 @@ describe("session-guard", () => {
   it("assertSessionActive throws when paused", () => {
     pauseSession("acc1");
     expect(() => assertSessionActive("acc1")).toThrow(/session paused/);
-    expect(() => assertSessionActive("acc1")).toThrow(String(SESSION_EXPIRED_ERRCODE));
+    expect(() => assertSessionActive("acc1")).toThrow(String(STALE_TOKEN_ERRCODE));
   });
 
   it("assertSessionActive stops throwing after pause expires", () => {
