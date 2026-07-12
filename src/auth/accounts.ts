@@ -379,11 +379,12 @@ export function resolveWeixinAccount(
   const accountData = loadWeixinAccount(id);
   const token = accountData?.token?.trim() || undefined;
   const stateBaseUrl = accountData?.baseUrl?.trim() || "";
-  const configBaseUrl = accountCfg.baseUrl?.trim() || section?.baseUrl?.trim() || "";
+  const accountBaseUrl = accountCfg.baseUrl?.trim() || "";
+  const sectionBaseUrl = section?.baseUrl?.trim() || "";
 
   return {
     accountId: id,
-    baseUrl: configBaseUrl || stateBaseUrl || DEFAULT_BASE_URL,
+    baseUrl: accountBaseUrl || stateBaseUrl || sectionBaseUrl || DEFAULT_BASE_URL,
     cdnBaseUrl: accountCfg.cdnBaseUrl?.trim() || section?.cdnBaseUrl?.trim() || CDN_BASE_URL,
     token,
     enabled: (accountCfg.enabled ?? section?.enabled) !== false,

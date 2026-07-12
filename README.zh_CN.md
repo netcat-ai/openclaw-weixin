@@ -31,7 +31,7 @@ openclaw plugins install @netcat-ai/openclaw-weixin
 openclaw config set plugins.entries.openclaw-weixin.enabled true
 ```
 
-使用自定义 iLink 后端时，首次登录前设置服务地址：
+使用自定义 iLink 后端时，在扫码登录前设置本次登录使用的服务地址：
 
 ```bash
 openclaw config set channels.openclaw-weixin.baseUrl http://127.0.0.1:38080
@@ -43,7 +43,9 @@ openclaw config set channels.openclaw-weixin.baseUrl http://127.0.0.1:38080
 openclaw channels login --channel openclaw-weixin
 ```
 
-终端会显示一个二维码，用手机扫码并在手机上确认授权。确认后，登录凭证会自动保存到本地，无需额外操作。
+终端会显示一个二维码，用手机扫码并在手机上确认授权。确认后，登录凭证和本次使用的服务地址会自动保存到该账号。
+
+之后修改渠道级 `baseUrl` 只影响下一次新账号登录，不会改变已有账号使用的后端。因此，同一个 `openclaw-weixin` 渠道可以同时连接官方后端和多个 Webox。
 
 重启 gateway：
 
@@ -53,7 +55,17 @@ openclaw gateway restart
 
 ## 添加更多微信账号
 
+登录官方后端：
+
 ```bash
+openclaw config set channels.openclaw-weixin.baseUrl https://ilinkai.weixin.qq.com
+openclaw channels login --channel openclaw-weixin
+```
+
+登录另一个 Webox：
+
+```bash
+openclaw config set channels.openclaw-weixin.baseUrl http://127.0.0.1:38081
 openclaw channels login --channel openclaw-weixin
 ```
 

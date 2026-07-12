@@ -32,7 +32,7 @@ Enable the plugin:
 openclaw config set plugins.entries.openclaw-weixin.enabled true
 ```
 
-For a custom iLink backend, set its base URL before the first login:
+For a custom iLink backend, set the service URL before the login that should use it:
 
 ```bash
 openclaw config set channels.openclaw-weixin.baseUrl http://127.0.0.1:38080
@@ -44,7 +44,9 @@ Then start QR code login:
 openclaw channels login --channel openclaw-weixin
 ```
 
-A QR code will appear in the terminal. Scan it with your phone and confirm the authorization. Once confirmed, the login credentials will be saved locally automatically — no further action is needed.
+A QR code will appear in the terminal. Scan it with your phone and confirm the authorization. Once confirmed, the login credentials and service URL are saved with that account.
+
+Changing the channel-level `baseUrl` later only affects the next new account login. Existing accounts keep their saved backend, so one `openclaw-weixin` channel can use the official backend and multiple Webox instances at the same time.
 
 Restart the gateway:
 
@@ -54,7 +56,17 @@ openclaw gateway restart
 
 ## Adding More WeChat Accounts
 
+Log in through the official backend:
+
 ```bash
+openclaw config set channels.openclaw-weixin.baseUrl https://ilinkai.weixin.qq.com
+openclaw channels login --channel openclaw-weixin
+```
+
+Log in through another Webox instance:
+
+```bash
+openclaw config set channels.openclaw-weixin.baseUrl http://127.0.0.1:38081
 openclaw channels login --channel openclaw-weixin
 ```
 
