@@ -106,6 +106,43 @@ describe("saveWeixinAccount", () => {
   });
 });
 
+describe("resolveWeixinAccount", () => {
+  it("uses account config baseUrl for a new account", async () => {
+    const { resolveWeixinAccount } = await loadModule();
+    const account = resolveWeixinAccount(
+      {
+        channels: {
+          "openclaw-weixin": {
+            baseUrl: "https://section.example.com",
+            accounts: {
+              primary: { baseUrl: "http://127.0.0.1:38080" },
+            },
+          },
+        },
+      } as never,
+      "primary",
+    );
+
+    expect(account.baseUrl).toBe("http://127.0.0.1:38080");
+    expect(account.configured).toBe(false);
+  });
+
+  it("falls back from account config to section then stored baseUrl", async () => {
+    const { resolveWeixinAccount, saveWeixinAccount } = await loadModule();
+    saveWeixinAccount("stored", { token: "tok", baseUrl: "https://stored.example.com" });
+
+    const sectionAccount = resolveWeixinAccount(
+      { channels: { "openclaw-weixin": { baseUrl: "https://section.example.com" } } } as never,
+      "section",
+    );
+    const storedAccount = resolveWeixinAccount({ channels: {} } as never, "stored");
+
+    expect(sectionAccount.baseUrl).toBe("https://section.example.com");
+    expect(storedAccount.baseUrl).toBe("https://stored.example.com");
+    expect(storedAccount.configured).toBe(true);
+  });
+});
+
 describe("clearWeixinAccount", () => {
   it("removes account file", async () => {
     const { saveWeixinAccount, clearWeixinAccount, loadWeixinAccount } = await loadModule();

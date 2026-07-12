@@ -168,6 +168,10 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
       type: "object",
       additionalProperties: false,
       properties: {
+        baseUrl: {
+          type: "string",
+          description: "iLink API base URL used for QR login and account requests.",
+        },
         replyProgressMessages: {
           type: "boolean",
           default: true,
