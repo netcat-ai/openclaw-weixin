@@ -4,6 +4,10 @@
   "description": "OpenClaw Weixin channel",
   "license": "MIT",
   "author": "Tencent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netcat-ai/openclaw-weixin.git"
+  },
   "type": "module",
   "files": [
     "src/",
@@ -65,6 +69,7 @@
   },
   "ilink_appid": "bot",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   }
 }
