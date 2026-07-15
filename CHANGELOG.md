@@ -4,6 +4,17 @@
 
 This project follows the [Keep a Changelog](https://keepachangelog.com/) format.
 
+## [Unreleased]
+
+### Added
+
+- **Group chat support:** Map iLink `group_id` / Webox `@chatroom` sessions to OpenClaw group conversations, preserve member identity in `SenderId`, isolate sessions by group, cache reply context by group, and route text/media replies back through the group's `context_token`.
+- **Group controls:** Add `groupPolicy`, `groupAllowFrom`, per-group `requireMention`, and `chatTypes: ["direct", "group"]` capability metadata.
+
+### Security
+
+- Authorize plugin slash commands before executing them and avoid updating the direct-message last route from group traffic.
+
 ## [2.4.5] - 2026-06-22
 
 ### Added

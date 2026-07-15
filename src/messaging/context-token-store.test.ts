@@ -32,4 +32,10 @@ describe("context-token-store", () => {
     expect(getContextToken("acc", "userA")).toBe("tokenA");
     expect(getContextToken("acc", "userB")).toBe("tokenB");
   });
+
+  it("stores group reply context by conversation id", () => {
+    setContextToken("acc", "family@chatroom", "group-token");
+    expect(getContextToken("acc", "family@chatroom")).toBe("group-token");
+    expect(getContextToken("acc", "wxid-member")).toBeUndefined();
+  });
 });

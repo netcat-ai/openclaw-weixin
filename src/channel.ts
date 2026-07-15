@@ -33,6 +33,7 @@ import { applyWeixinMessageSendingHook, emitWeixinMessageSent } from "./messagin
 import { sendWeixinMediaFile } from "./messaging/send-media.js";
 import { sendMessageWeixin, StreamingMarkdownFilter } from "./messaging/send.js";
 import { downloadRemoteImageToTemp } from "./cdn/upload.js";
+import { resolveWeixinRequireMention } from "./config/group-chat.js";
 
 /** Returns true when mediaUrl refers to a local filesystem path (absolute or relative). */
 function isLocalFilePath(mediaUrl: string): boolean {
@@ -173,11 +174,34 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           default: true,
           description: "Send structured tool-call progress messages.",
         },
+        groupPolicy: {
+          type: "string",
+          enum: ["open", "allowlist", "disabled"],
+          default: "open",
+          description: "Control which Weixin group conversations are accepted.",
+        },
+        groupAllowFrom: {
+          type: "array",
+          items: { type: "string" },
+          default: [],
+          description: "Optional Weixin member IDs allowed in groups.",
+        },
+        groups: {
+          type: "object",
+          additionalProperties: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              requireMention: { type: "boolean" },
+            },
+          },
+          description: "Per-group settings keyed by group ID; '*' is the default.",
+        },
       },
     },
   },
   capabilities: {
-    chatTypes: ["direct"],
+    chatTypes: ["direct", "group"],
     media: true,
     blockStreaming: true,
   },
@@ -189,13 +213,17 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
   },
   messaging: {
     targetResolver: {
-      // Weixin user IDs always end with @im.wechat; treat as direct IDs, skip directory lookup.
-      looksLikeId: (raw) => raw.endsWith("@im.wechat"),
+      // Webox group IDs end with @chatroom; both forms are routable without directory lookup.
+      looksLikeId: (raw) => raw.endsWith("@im.wechat") || raw.endsWith("@chatroom"),
     },
+  },
+  groups: {
+    resolveRequireMention: ({ cfg, accountId, groupId }) =>
+      resolveWeixinRequireMention({ cfg, accountId, groupId }),
   },
   agentPrompt: {
     messageToolHints: () => [
-      "To send an image or file to the current user, use the message tool with action='send' and set 'media' to a local file path or a remote URL. You do not need to specify 'to' — the current conversation recipient is used automatically.",
+      "To send an image or file to the current conversation, use the message tool with action='send' and set 'media' to a local file path or a remote URL. You do not need to specify 'to' — the current conversation recipient or group is used automatically.",
       "When the user asks you to find an image from the web, use a web search or browser tool to find a suitable image URL, then send it using the message tool with 'media' set to that HTTPS image URL — do NOT download the image first.",
       "IMPORTANT: When generating or saving a file to send, always use an absolute path (e.g. /tmp/photo.png), never a relative path like ./photo.png. Relative paths cannot be resolved and the file will not be delivered.",
       "IMPORTANT: When creating a cron job (scheduled task) for the current Weixin user, you MUST set delivery.to to the user's Weixin ID (the xxx@im.wechat address from the current conversation) AND set delivery.accountId to the current AccountId. Without an explicit 'to', the cron delivery will fail with 'requires target'. Without an explicit 'accountId', the message may be sent from the wrong bot account. Example: delivery: { mode: 'announce', channel: 'openclaw-weixin', to: '<current_user_id@im.wechat>', accountId: '<current_AccountId>' }.",

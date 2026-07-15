@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { isMediaItem, weixinMessageToMsgContext, getContextTokenFromMsgContext } from "./inbound.js";
+import {
+  isMediaItem,
+  weixinMessageToMsgContext,
+  getContextTokenFromMsgContext,
+  resolveWeixinConversation,
+} from "./inbound.js";
 import type { WeixinMsgContext } from "./inbound.js";
 import { MessageItemType } from "../api/types.js";
 import type { WeixinMessage, MessageItem } from "../api/types.js";
@@ -70,6 +75,7 @@ describe("weixinMessageToMsgContext", () => {
     expect(ctx.OriginatingChannel).toBe("openclaw-weixin");
     expect(ctx.Provider).toBe("openclaw-weixin");
     expect(ctx.ChatType).toBe("direct");
+    expect(ctx.SenderId).toBe("user123");
     expect(ctx.context_token).toBe("ctx-token-abc");
     expect(ctx.MessageSid).toMatch(/^openclaw-weixin:\d+-[0-9a-f]+$/);
     expect(ctx.Timestamp).toBe(1700000000000);
@@ -80,6 +86,64 @@ describe("weixinMessageToMsgContext", () => {
     const ctx = weixinMessageToMsgContext(msg, "acc");
     expect(ctx.From).toBe("");
     expect(ctx.To).toBe("");
+  });
+
+  it("separates a group conversation from its member sender", () => {
+    const msg: WeixinMessage = {
+      from_user_id: "wxid-alice",
+      session_id: "family@chatroom",
+      group_id: "family@chatroom",
+      item_list: [{ type: MessageItemType.TEXT, text_item: { text: "hello group" } }],
+      context_token: "group-context",
+    };
+    const ctx = weixinMessageToMsgContext(msg, "acc");
+    expect(ctx).toMatchObject({
+      Body: "hello group",
+      From: "family@chatroom",
+      To: "family@chatroom",
+      OriginatingTo: "family@chatroom",
+      ChatType: "group",
+      ConversationLabel: "family@chatroom",
+      GroupSubject: "family@chatroom",
+      SenderId: "wxid-alice",
+      context_token: "group-context",
+    });
+  });
+
+  it("recognizes Webox group sessions when group_id is omitted", () => {
+    expect(resolveWeixinConversation({
+      from_user_id: "wxid-bob",
+      session_id: "team@chatroom",
+    })).toEqual({
+      isGroup: true,
+      groupId: "team@chatroom",
+      senderId: "wxid-bob",
+      targetId: "team@chatroom",
+      peerKind: "group",
+    });
+  });
+
+  it("uses a non-group session as the direct reply target when sender is absent", () => {
+    expect(resolveWeixinConversation({ session_id: "fallback-session" })).toEqual({
+      isGroup: false,
+      senderId: "",
+      targetId: "fallback-session",
+      peerKind: "direct",
+    });
+  });
+
+  it("prefers and trims an explicit group id over the session id", () => {
+    expect(resolveWeixinConversation({
+      from_user_id: " wxid-carol ",
+      session_id: "stale@chatroom",
+      group_id: " current@chatroom ",
+    })).toEqual({
+      isGroup: true,
+      groupId: "current@chatroom",
+      senderId: "wxid-carol",
+      targetId: "current@chatroom",
+      peerKind: "group",
+    });
   });
 
   it("handles empty item_list", () => {
@@ -250,6 +314,17 @@ describe("weixinMessageToMsgContext", () => {
     };
     const ctx = weixinMessageToMsgContext(msg, "acc");
     expect(ctx.Body).toBe("");
+  });
+
+  it("uses voice transcription as the message body", () => {
+    const msg: WeixinMessage = {
+      from_user_id: "u",
+      item_list: [
+        { type: MessageItemType.VOICE, voice_item: { text: "transcribed voice" } },
+      ],
+    };
+    const ctx = weixinMessageToMsgContext(msg, "acc");
+    expect(ctx.Body).toBe("transcribed voice");
   });
 });
 

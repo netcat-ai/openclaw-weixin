@@ -16,6 +16,7 @@ import { loadWeixinAccount } from "../auth/accounts.js";
 import { readFrameworkAllowFromList } from "../auth/pairing.js";
 import { downloadRemoteImageToTemp } from "../cdn/upload.js";
 import { resolveReplyProgressMessagesEnabled } from "../config/reply-progress.js";
+import { resolveWeixinGroupAccess } from "../config/group-chat.js";
 import { downloadMediaFromItem } from "../media/media-download.js";
 import { logger } from "../util/logger.js";
 import { redactBody, redactToken } from "../util/redact.js";
@@ -28,6 +29,7 @@ import {
   weixinMessageToMsgContext,
   getContextTokenFromMsgContext,
   isMediaItem,
+  resolveWeixinConversation,
 } from "./inbound.js";
 import type { WeixinInboundMediaOpts } from "./inbound.js";
 import { sendWeixinMediaFile } from "./send-media.js";
@@ -82,23 +84,9 @@ export async function processOneMessage(
   const debug = isDebugMode(deps.accountId);
   const debugTrace: string[] = [];
   const debugTs: Record<string, number> = { received: receivedAt };
+  const conversation = resolveWeixinConversation(full);
 
   const textBody = extractTextBody(full.item_list);
-  if (textBody.startsWith("/")) {
-    const slashResult = await handleSlashCommand(textBody, {
-      to: full.from_user_id ?? "",
-      contextToken: full.context_token,
-      baseUrl: deps.baseUrl,
-      token: deps.token,
-      accountId: deps.accountId,
-      log: deps.log,
-      errLog: deps.errLog,
-    }, receivedAt, full.create_time_ms);
-    if (slashResult.handled) {
-      logger.info(`[weixin] Slash command handled, skipping AI pipeline`);
-      return;
-    }
-  }
 
   if (debug) {
     const itemTypes = full.item_list?.map((i) => i.type).join(",") ?? "none";
@@ -169,18 +157,39 @@ export async function processOneMessage(
   const rawBody = ctx.Body?.trim() ?? "";
   ctx.CommandBody = rawBody;
 
-  const senderId = full.from_user_id ?? "";
+  const senderId = conversation.senderId;
+  const { groupPolicy, groupAllowFrom } = resolveWeixinGroupAccess(
+    deps.config,
+    deps.accountId,
+  );
+
+  if (conversation.isGroup) {
+    const groupAccess = deps.channelRuntime.groups.resolveGroupPolicy({
+      cfg: deps.config,
+      channel: "openclaw-weixin",
+      groupId: conversation.groupId,
+      accountId: deps.accountId,
+      hasGroupAllowFrom: groupAllowFrom.length > 0,
+    });
+    if (!groupAccess.allowed) {
+      logger.info(
+        `authorization: dropping group=${conversation.groupId} policy=${groupPolicy}`,
+      );
+      return;
+    }
+  }
 
   const { senderAllowedForCommands, commandAuthorized } =
     await resolveSenderCommandAuthorizationWithRuntime({
       cfg: deps.config,
       rawBody,
-      isGroup: false,
+      isGroup: conversation.isGroup,
       dmPolicy: "pairing",
       configuredAllowFrom: [],
-      configuredGroupAllowFrom: [],
+      configuredGroupAllowFrom: groupAllowFrom,
       senderId,
-      isSenderAllowed: (id: string, list: string[]) => list.length === 0 || list.includes(id),
+      isSenderAllowed: (id: string, list: string[]) =>
+        list.length === 0 || list.includes("*") || list.includes(id),
       /** Pairing: framework credentials `*-allowFrom.json`, with account `userId` fallback for legacy installs. */
       readAllowFromStore: async () => {
         const fromStore = readFrameworkAllowFromList(deps.accountId);
@@ -192,7 +201,7 @@ export async function processOneMessage(
     });
 
   const directDmOutcome = resolveDirectDmAuthorizationOutcome({
-    isGroup: false,
+    isGroup: conversation.isGroup,
     dmPolicy: "pairing",
     senderAllowedForCommands,
   });
@@ -200,6 +209,17 @@ export async function processOneMessage(
   if (directDmOutcome === "disabled" || directDmOutcome === "unauthorized") {
     logger.info(
       `authorization: dropping message from=${senderId} outcome=${directDmOutcome}`,
+    );
+    return;
+  }
+  if (
+    conversation.isGroup &&
+    groupPolicy === "allowlist" &&
+    groupAllowFrom.length > 0 &&
+    !senderAllowedForCommands
+  ) {
+    logger.info(
+      `authorization: dropping group sender=${senderId} group=${conversation.groupId} (not in groupAllowFrom)`,
     );
     return;
   }
@@ -220,8 +240,19 @@ export async function processOneMessage(
     cfg: deps.config,
     channel: "openclaw-weixin",
     accountId: deps.accountId,
-    peer: { kind: "direct", id: ctx.To },
+    peer: { kind: conversation.peerKind, id: conversation.targetId },
   });
+
+  if (conversation.isGroup) {
+    const mentionRegexes = deps.channelRuntime.mentions.buildMentionRegexes(
+      deps.config,
+      route.agentId,
+    );
+    ctx.WasMentioned = deps.channelRuntime.mentions.matchesMentionPatterns(
+      rawBody,
+      mentionRegexes,
+    );
+  }
   logger.debug(
     `resolveAgentRoute: agentId=${route.agentId ?? "(none)"} sessionKey=${route.sessionKey ?? "(none)"} mainSessionKey=${route.mainSessionKey ?? "(none)"}`,
   );
@@ -236,6 +267,28 @@ export async function processOneMessage(
       `│ route: agent=${route.agentId ?? "none"} session=${route.sessionKey ?? "none"}`,
     );
     debugTs.preDispatch = Date.now();
+  }
+
+  if (textBody.startsWith("/")) {
+    if (commandAuthorized !== true) {
+      logger.info(
+        `authorization: dropping unauthorized slash command sender=${senderId} group=${conversation.groupId ?? "direct"}`,
+      );
+      return;
+    }
+    const slashResult = await handleSlashCommand(textBody, {
+      to: conversation.targetId,
+      contextToken: full.context_token,
+      baseUrl: deps.baseUrl,
+      token: deps.token,
+      accountId: deps.accountId,
+      log: deps.log,
+      errLog: deps.errLog,
+    }, receivedAt, full.create_time_ms);
+    if (slashResult.handled) {
+      logger.info(`[weixin] Slash command handled, skipping AI pipeline`);
+      return;
+    }
   }
   // Propagate the resolved session key into ctx so dispatchReplyFromConfig uses
   // the correct session (matching the dmScope from config) instead of falling back
@@ -257,12 +310,16 @@ export async function processOneMessage(
     storePath,
     sessionKey: route.sessionKey,
     ctx: finalized as Parameters<typeof deps.channelRuntime.session.recordInboundSession>[0]["ctx"],
-    updateLastRoute: {
-      sessionKey: route.mainSessionKey,
-      channel: "openclaw-weixin",
-      to: ctx.To,
-      accountId: deps.accountId,
-    },
+    ...(conversation.isGroup
+      ? {}
+      : {
+          updateLastRoute: {
+            sessionKey: route.mainSessionKey,
+            channel: "openclaw-weixin" as const,
+            to: ctx.To,
+            accountId: deps.accountId,
+          },
+        }),
     onRecordError: (err) => deps.errLog(`recordInboundSession: ${String(err)}`),
   });
   logger.debug(
@@ -271,7 +328,7 @@ export async function processOneMessage(
 
   const contextToken = getContextTokenFromMsgContext(ctx);
   if (contextToken) {
-    setContextToken(deps.accountId, full.from_user_id ?? "", contextToken);
+    setContextToken(deps.accountId, conversation.targetId, contextToken);
   }
   const runId = randomUUID();
   const replyProgressSender = resolveReplyProgressMessagesEnabled(deps.config)
@@ -288,7 +345,7 @@ export async function processOneMessage(
     : undefined;
   const humanDelay = deps.channelRuntime.reply.resolveHumanDelayConfig(deps.config, route.agentId);
 
-  const hasTypingTicket = Boolean(deps.typingTicket);
+  const hasTypingTicket = !conversation.isGroup && Boolean(deps.typingTicket);
   const typingCallbacks = createTypingCallbacks({
     start: hasTypingTicket
       ? () =>

@@ -146,7 +146,11 @@ export type WeixinMsgContext = {
   MessageSid: string;
   Timestamp?: number;
   Provider: "openclaw-weixin";
-  ChatType: "direct";
+  ChatType: "direct" | "group";
+  ConversationLabel?: string;
+  GroupSubject?: string;
+  SenderId?: string;
+  WasMentioned?: boolean;
   /** Set by monitor after resolveAgentRoute so dispatchReplyFromConfig uses the correct session. */
   SessionKey?: string;
   context_token?: string;
@@ -158,6 +162,30 @@ export type WeixinMsgContext = {
   /** Whether the sender is authorized to execute slash commands. */
   CommandAuthorized?: boolean;
 };
+
+export type WeixinConversation = {
+  isGroup: boolean;
+  groupId?: string;
+  senderId: string;
+  targetId: string;
+  peerKind: "direct" | "group";
+};
+
+/** Resolve the member identity separately from the conversation/reply target. */
+export function resolveWeixinConversation(msg: WeixinMessage): WeixinConversation {
+  const senderId = msg.from_user_id?.trim() ?? "";
+  const sessionId = msg.session_id?.trim() ?? "";
+  const explicitGroupId = msg.group_id?.trim() ?? "";
+  const groupId = explicitGroupId || (sessionId.endsWith("@chatroom") ? sessionId : "");
+  const isGroup = groupId !== "";
+  return {
+    isGroup,
+    ...(isGroup ? { groupId } : {}),
+    senderId,
+    targetId: isGroup ? groupId : senderId || sessionId,
+    peerKind: isGroup ? "group" : "direct",
+  };
+}
 
 /** Returns true if the message item is a media type (image, video, file, or voice). */
 export function isMediaItem(item: MessageItem): boolean {
@@ -222,18 +250,25 @@ export function weixinMessageToMsgContext(
   accountId: string,
   opts?: WeixinInboundMediaOpts,
 ): WeixinMsgContext {
-  const from_user_id = msg.from_user_id ?? "";
+  const conversation = resolveWeixinConversation(msg);
   const ctx: WeixinMsgContext = {
     Body: bodyFromItemList(msg.item_list),
-    From: from_user_id,
-    To: from_user_id,
+    From: conversation.targetId,
+    To: conversation.targetId,
     AccountId: accountId,
     OriginatingChannel: "openclaw-weixin",
-    OriginatingTo: from_user_id,
+    OriginatingTo: conversation.targetId,
     MessageSid: generateMessageSid(),
     Timestamp: msg.create_time_ms,
     Provider: "openclaw-weixin",
-    ChatType: "direct",
+    ChatType: conversation.isGroup ? "group" : "direct",
+    SenderId: conversation.senderId || undefined,
+    ...(conversation.isGroup
+      ? {
+          ConversationLabel: conversation.groupId,
+          GroupSubject: conversation.groupId,
+        }
+      : {}),
   };
   if (msg.context_token) {
     ctx.context_token = msg.context_token;

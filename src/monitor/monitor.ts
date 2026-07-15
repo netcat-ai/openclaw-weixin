@@ -5,6 +5,7 @@ import { getUpdates, classifyFetchError } from "../api/api.js";
 import { WeixinConfigManager } from "../api/config-cache.js";
 import { STALE_TOKEN_ERRCODE, pauseSession, getRemainingPauseMs } from "../api/session-guard.js";
 import { processOneMessage } from "../messaging/process-message.js";
+import { resolveWeixinConversation } from "../messaging/inbound.js";
 import { getSyncBufFilePath, loadGetUpdatesBuf, saveGetUpdatesBuf } from "../storage/sync-buf.js";
 import { logger } from "../util/logger.js";
 import type { Logger } from "../util/logger.js";
@@ -166,8 +167,10 @@ export async function monitorWeixinProvider(opts: MonitorWeixinOpts): Promise<vo
         // allowFrom filtering is delegated to processOneMessage via the framework
         // authorization pipeline (resolveSenderCommandAuthorizationWithRuntime).
 
-        const fromUserId = full.from_user_id ?? "";
-        const cachedConfig = await configManager.getForUser(fromUserId, full.context_token);
+        const conversation = resolveWeixinConversation(full);
+        const cachedConfig = conversation.isGroup
+          ? { typingTicket: "" }
+          : await configManager.getForUser(conversation.targetId, full.context_token);
 
         await processOneMessage(full, {
           accountId,
