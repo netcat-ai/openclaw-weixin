@@ -7,8 +7,6 @@ describe("WeixinConfigSchema", () => {
     expect(result.baseUrl).toBe("https://ilinkai.weixin.qq.com");
     expect(result.cdnBaseUrl).toBe("https://novac2c.cdn.weixin.qq.com/c2c");
     expect(result.replyProgressMessages).toBe(true);
-    expect(result.groupPolicy).toBe("open");
-    expect(result.groupAllowFrom).toEqual([]);
   });
 
   it("accepts custom baseUrl and cdnBaseUrl", () => {
@@ -39,22 +37,18 @@ describe("WeixinConfigSchema", () => {
   it("accepts accounts map", () => {
     const result = WeixinConfigSchema.parse({
       accounts: {
-        "acc1": { name: "Bot 1", enabled: true },
-        "acc2": { name: "Bot 2" },
+        acc1: { name: "Bot 1", enabled: true },
+        acc2: { name: "Bot 2" },
       },
     });
     expect(result.accounts?.acc1?.name).toBe("Bot 1");
     expect(result.accounts?.acc2?.name).toBe("Bot 2");
   });
 
-  it("accepts group policy, sender allowlist, and mention rules", () => {
+  it("accepts OpenClaw group mention rules", () => {
     const result = WeixinConfigSchema.parse({
-      groupPolicy: "allowlist",
-      groupAllowFrom: ["wxid-owner"],
       groups: { "family@chatroom": { requireMention: true } },
     });
-    expect(result.groupPolicy).toBe("allowlist");
-    expect(result.groupAllowFrom).toEqual(["wxid-owner"]);
     expect(result.groups?.["family@chatroom"]?.requireMention).toBe(true);
   });
 

@@ -80,31 +80,30 @@ Group members are kept as sender identities while routing, session history, cont
 tokens, and replies use the group ID, so different members share the same group
 session without leaking into direct-message sessions.
 
-By default, group handling is open and always-on. It can be restricted in
-`openclaw.json`:
+Webox performs conversation admission before messages reach this plugin. Group
+activation then uses OpenClaw's standard mention gate. For example:
 
 ```json
 {
   "channels": {
     "openclaw-weixin": {
-      "groupPolicy": "allowlist",
-      "groupAllowFrom": ["wxid_owner"],
       "groups": {
-        "family@chatroom": { "requireMention": false },
-        "work@chatroom": { "requireMention": true }
+        "*": { "requireMention": true }
       }
+    }
+  },
+  "messages": {
+    "groupChat": {
+      "mentionPatterns": ["虾虾"]
     }
   }
 }
 ```
 
-- `groupPolicy`: `open` (default), `allowlist`, or `disabled`.
-- `groupAllowFrom`: optional member IDs accepted when using `allowlist`.
-- `groups`: group IDs accepted by the allowlist; `"*"` can provide a default.
-- `requireMention`: when enabled, OpenClaw's configured agent mention patterns
-  are matched against message text. Public iLink messages do not expose a
-  structured mention list, so configure a text pattern matching the bot's group
-  nickname.
+`requireMention` defaults to `true`. OpenClaw matches its configured agent or
+global mention patterns against message text. Public iLink messages do not
+expose a structured mention list, so include the bot's group nickname as a text
+pattern. The plugin does not maintain a second group or sender allowlist.
 
 ## Custom BotAgent (optional)
 

@@ -78,28 +78,29 @@ openclaw config set session.dmScope per-account-channel-peer
 发送者身份，同时用群 ID 进行路由、会话记录、context token 缓存和回复，因而
 同一群的成员共享群会话，并与私聊会话隔离。
 
-默认接受所有群聊消息且无需 @。可在 `openclaw.json` 中限制：
+Webox 会在消息进入插件前完成会话准入；群聊是否唤醒 Agent 则使用 OpenClaw
+标准的 mention gate。例如：
 
 ```json
 {
   "channels": {
     "openclaw-weixin": {
-      "groupPolicy": "allowlist",
-      "groupAllowFrom": ["wxid_owner"],
       "groups": {
-        "family@chatroom": { "requireMention": false },
-        "work@chatroom": { "requireMention": true }
+        "*": { "requireMention": true }
       }
+    }
+  },
+  "messages": {
+    "groupChat": {
+      "mentionPatterns": ["虾虾"]
     }
   }
 }
 ```
 
-- `groupPolicy`：`open`（默认）、`allowlist` 或 `disabled`。
-- `groupAllowFrom`：`allowlist` 模式下允许发言的群成员 ID，可选。
-- `groups`：白名单中的群 ID；可用 `"*"` 设置默认规则。
-- `requireMention`：开启后使用 OpenClaw 配置的 agent mention pattern 匹配文本。
-  公开 iLink 消息没有结构化的 @ 列表，因此需配置能匹配机器人群昵称的文本规则。
+`requireMention` 默认为 `true`。OpenClaw 使用 agent 或全局 mention pattern 匹配
+消息正文。公开 iLink 消息没有结构化的 @ 列表，因此应把机器人群昵称配置为文本
+pattern。插件不再额外维护群或发送者白名单。
 
 ## 自定义 BotAgent（可选）
 

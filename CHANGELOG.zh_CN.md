@@ -9,7 +9,7 @@
 ### 新增
 
 - **群聊支持：** 将 iLink `group_id` / Webox `@chatroom` 会话映射为 OpenClaw 群聊，群成员写入 `SenderId`，按群隔离会话和回复 context，并通过群消息的 `context_token` 将文本或媒体回复发回原群。
-- **群聊控制：** 新增 `groupPolicy`、`groupAllowFrom`、按群配置的 `requireMention`，并声明 `chatTypes: ["direct", "group"]`。
+- **OpenClaw 群聊激活：** 接入按群配置的 `requireMention` 并声明 `chatTypes: ["direct", "group"]`，插件不再额外维护发送者白名单。
 
 ### 安全
 
