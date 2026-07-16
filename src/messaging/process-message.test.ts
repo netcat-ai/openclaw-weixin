@@ -37,9 +37,7 @@ vi.mock("../util/logger.js", () => ({
 
 import { processOneMessage } from "./process-message.js";
 
-function createRuntime(
-  options: { groupAllowed?: boolean; delayedSessionMeta?: boolean } = {},
-) {
+function createRuntime(options: { delayedSessionMeta?: boolean } = {}) {
   let deliver: ((payload: { text: string }) => Promise<void>) | undefined;
   const resolveAgentRoute = vi.fn(() => ({
     agentId: "main",
@@ -64,12 +62,6 @@ function createRuntime(
     },
   );
   const runtime = {
-    groups: {
-      resolveGroupPolicy: vi.fn(() => ({
-        allowlistEnabled: false,
-        allowed: options.groupAllowed !== false,
-      })),
-    },
     commands: {
       shouldComputeCommandAuthorized: vi.fn(() => false),
       resolveCommandAuthorizedFromAuthorizers: vi.fn(() => false),
@@ -130,7 +122,7 @@ const groupMessage = {
   group_id: "family@chatroom",
   context_token: "group-context",
   item_list: [
-    { type: MessageItemType.TEXT, text_item: { text: "hello group" } },
+    { type: MessageItemType.TEXT, text_item: { text: "@openclaw hello group" } },
   ],
 };
 
@@ -170,8 +162,8 @@ describe("processOneMessage group routing", () => {
   });
 
   it("routes, records, and replies by group while retaining the member sender", async () => {
-    const { runtime, resolveAgentRoute, recordInboundSession } =
-      createRuntime();
+    const { runtime, resolveAgentRoute, recordInboundSession, dispatchSessionMetaStates } =
+      createRuntime({ delayedSessionMeta: true });
     await processOneMessage(groupMessage, createDeps(runtime));
 
     expect(resolveAgentRoute).toHaveBeenCalledWith(
@@ -187,7 +179,7 @@ describe("processOneMessage group routing", () => {
           To: "family@chatroom",
           SenderId: "wxid-alice",
           GroupSubject: "family@chatroom",
-          WasMentioned: false,
+          WasMentioned: true,
         }),
       }),
     );
@@ -199,56 +191,7 @@ describe("processOneMessage group routing", () => {
       text: "group reply",
       opts: expect.objectContaining({ contextToken: "group-context" }),
     });
-  });
-
-  it("passes the OpenClaw mention match into the group context", async () => {
-    const { runtime, recordInboundSession } = createRuntime();
-    const mentionedMessage = {
-      ...groupMessage,
-      item_list: [
-        {
-          type: MessageItemType.TEXT,
-          text_item: { text: "@openclaw hello group" },
-        },
-      ],
-    };
-
-    await processOneMessage(mentionedMessage, createDeps(runtime));
-
-    expect(recordInboundSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        ctx: expect.objectContaining({ WasMentioned: true }),
-      }),
-    );
-  });
-
-  it("does not apply a second group allowlist after Webox admission", async () => {
-    const { runtime, resolveAgentRoute } = createRuntime({
-      groupAllowed: false,
-    });
-    await processOneMessage(groupMessage, createDeps(runtime));
-    expect(resolveAgentRoute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        peer: { kind: "group", id: "family@chatroom" },
-      }),
-    );
-    expect(mockSendMessageWeixin).toHaveBeenCalled();
-  });
-
-  it("does not apply a second direct-message allowlist after Webox admission", async () => {
-    const { runtime, resolveAgentRoute } = createRuntime();
-    await processOneMessage(directMessage, createDeps(runtime));
-
-    expect(resolveAgentRoute).toHaveBeenCalledWith(
-      expect.objectContaining({
-        peer: { kind: "direct", id: "wxid-unpaired" },
-      }),
-    );
-    expect(mockSendMessageWeixin).toHaveBeenCalledWith({
-      to: "wxid-unpaired",
-      text: "group reply",
-      opts: expect.objectContaining({ contextToken: "direct-context" }),
-    });
+    expect(dispatchSessionMetaStates).toEqual([false]);
   });
 
   it("waits for inbound session metadata before starting the Agent reply", async () => {
@@ -259,14 +202,4 @@ describe("processOneMessage group routing", () => {
     expect(mockSendMessageWeixin).toHaveBeenCalled();
   });
 
-  it("lets OpenClaw coordinate group session metadata with reply initialization", async () => {
-    const { runtime, dispatchSessionMetaStates } = createRuntime({
-      delayedSessionMeta: true,
-    });
-
-    await processOneMessage(groupMessage, createDeps(runtime));
-
-    expect(dispatchSessionMetaStates).toEqual([false]);
-    expect(mockSendMessageWeixin).toHaveBeenCalled();
-  });
 });

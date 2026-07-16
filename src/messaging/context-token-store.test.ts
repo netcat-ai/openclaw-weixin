@@ -40,12 +40,10 @@ describe("context-token-store", () => {
     expect(getContextToken("acc", "wxid-member")).toBeUndefined();
   });
 
-  it("keeps the in-memory token when disk persistence fails", () => {
-    vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => {
-      throw new Error("disk unavailable");
-    });
-
-    expect(() => setContextToken("acc-disk", "user", "token-memory")).not.toThrow();
+  it("keeps the in-memory token when persistence fails", () => {
+    vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => { throw new Error("disk unavailable"); });
+    setContextToken("acc-disk", "user", "token-memory");
     expect(getContextToken("acc-disk", "user")).toBe("token-memory");
   });
+
 });

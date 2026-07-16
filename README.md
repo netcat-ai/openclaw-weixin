@@ -80,39 +80,6 @@ By default, DMs can share one session bucket. For **multiple logged-in WeChat ac
 openclaw config set session.dmScope per-account-channel-peer
 ```
 
-## Group Chats
-
-Group chats are supported when the configured iLink backend includes `group_id`
-(or an `@chatroom` `session_id`) in `getUpdates`. Webox provides these fields.
-Group members are kept as sender identities while routing, session history, context
-tokens, and replies use the group ID, so different members share the same group
-session without leaking into direct-message sessions.
-
-Webox performs conversation admission before messages reach this plugin. Group
-activation then uses OpenClaw's standard mention gate. For example:
-
-```json
-{
-  "channels": {
-    "openclaw-weixin": {
-      "groups": {
-        "*": { "requireMention": true }
-      }
-    }
-  },
-  "messages": {
-    "groupChat": {
-      "mentionPatterns": ["虾虾"]
-    }
-  }
-}
-```
-
-`requireMention` defaults to `true`. OpenClaw matches its configured agent or
-global mention patterns against message text. Public iLink messages do not
-expose a structured mention list, so include the bot's group nickname as a text
-pattern. The plugin does not maintain a second group or sender allowlist.
-
 ## Custom BotAgent (optional)
 
 Every outbound request to the WeChat backend carries a self-declared `bot_agent`

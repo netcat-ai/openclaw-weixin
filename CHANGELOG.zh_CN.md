@@ -4,17 +4,6 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 格式。
 
-## [2.4.8] - 2026-07-16
-
-### 新增
-
-- **群聊支持：** 将 iLink `group_id` / Webox `@chatroom` 会话映射为 OpenClaw 群聊，群成员写入 `SenderId`，按群隔离会话和回复 context，并通过群消息的 `context_token` 将文本或媒体回复发回原群。
-- **OpenClaw 群聊激活：** 接入按群配置的 `requireMention` 并声明 `chatTypes: ["direct", "group"]`，插件不再额外维护发送者白名单。
-
-### 安全
-
-- 插件内置 slash command 先鉴权再执行；群消息不再覆盖私聊的 last route。
-
 ## [2.4.7] - 2026-07-12
 
 ### 变更

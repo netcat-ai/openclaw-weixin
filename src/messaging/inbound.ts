@@ -174,15 +174,13 @@ export type WeixinConversation = {
 /** Resolve the member identity separately from the conversation/reply target. */
 export function resolveWeixinConversation(msg: WeixinMessage): WeixinConversation {
   const senderId = msg.from_user_id?.trim() ?? "";
-  const sessionId = msg.session_id?.trim() ?? "";
-  const explicitGroupId = msg.group_id?.trim() ?? "";
-  const groupId = explicitGroupId || (sessionId.endsWith("@chatroom") ? sessionId : "");
+  const groupId = msg.group_id?.trim() ?? "";
   const isGroup = groupId !== "";
   return {
     isGroup,
     ...(isGroup ? { groupId } : {}),
     senderId,
-    targetId: isGroup ? groupId : senderId || sessionId,
+    targetId: isGroup ? groupId : senderId,
     peerKind: isGroup ? "group" : "direct",
   };
 }
@@ -262,11 +260,11 @@ export function weixinMessageToMsgContext(
     Timestamp: msg.create_time_ms,
     Provider: "openclaw-weixin",
     ChatType: conversation.isGroup ? "group" : "direct",
-    SenderId: conversation.senderId || undefined,
     ...(conversation.isGroup
       ? {
           ConversationLabel: conversation.groupId,
           GroupSubject: conversation.groupId,
+          SenderId: conversation.senderId || undefined,
         }
       : {}),
   };

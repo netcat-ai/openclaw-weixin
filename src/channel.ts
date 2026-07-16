@@ -1,12 +1,9 @@
 import path from "node:path";
 
-import type {
-  ChannelPlugin,
-  OpenClawConfig,
-  PluginRuntime,
-} from "openclaw/plugin-sdk/core";
+import type { ChannelPlugin, OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk/core";
 import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/infra-runtime";
+import { resolveChannelGroupRequireMention } from "openclaw/plugin-sdk/channel-policy";
 
 import {
   registerWeixinAccountId,
@@ -21,12 +18,7 @@ import {
 import type { ResolvedWeixinAccount } from "./auth/accounts.js";
 import { notifyStop, notifyStart } from "./api/api.js";
 import { assertSessionActive } from "./api/session-guard.js";
-import {
-  getContextToken,
-  findAccountIdsByContextToken,
-  restoreContextTokens,
-  clearContextTokensForAccount,
-} from "./messaging/inbound.js";
+import { getContextToken, findAccountIdsByContextToken, restoreContextTokens, clearContextTokensForAccount } from "./messaging/inbound.js";
 import { logger } from "./util/logger.js";
 import {
   DEFAULT_ILINK_BOT_TYPE,
@@ -34,24 +26,14 @@ import {
   waitForWeixinLogin,
   displayQRCode,
 } from "./auth/login-qr.js";
-import type {
-  WeixinQrStartResult,
-  WeixinQrWaitResult,
-} from "./auth/login-qr.js";
+import type { WeixinQrStartResult, WeixinQrWaitResult } from "./auth/login-qr.js";
 // Lazy-imported inside startAccount to avoid pulling in the monitor -> process-message ->
 // command-auth chain during plugin registration, which can re-enter plugin/provider registry
 // resolution before the account actually starts.
-import {
-  applyWeixinMessageSendingHook,
-  emitWeixinMessageSent,
-} from "./messaging/outbound-hooks.js";
+import { applyWeixinMessageSendingHook, emitWeixinMessageSent } from "./messaging/outbound-hooks.js";
 import { sendWeixinMediaFile } from "./messaging/send-media.js";
-import {
-  sendMessageWeixin,
-  StreamingMarkdownFilter,
-} from "./messaging/send.js";
+import { sendMessageWeixin, StreamingMarkdownFilter } from "./messaging/send.js";
 import { downloadRemoteImageToTemp } from "./cdn/upload.js";
-import { resolveWeixinRequireMention } from "./config/group-chat.js";
 
 /** Returns true when mediaUrl refers to a local filesystem path (absolute or relative). */
 function isLocalFilePath(mediaUrl: string): boolean {
@@ -63,10 +45,7 @@ function isRemoteUrl(mediaUrl: string): boolean {
   return mediaUrl.startsWith("http://") || mediaUrl.startsWith("https://");
 }
 
-const MEDIA_OUTBOUND_TEMP_DIR = path.join(
-  resolvePreferredOpenClawTmpDir(),
-  "weixin/media/outbound-temp",
-);
+const MEDIA_OUTBOUND_TEMP_DIR = path.join(resolvePreferredOpenClawTmpDir(), "weixin/media/outbound-temp");
 
 /** Resolve any local path scheme to an absolute filesystem path. */
 function resolveLocalPath(mediaUrl: string): string {
@@ -85,7 +64,10 @@ function resolveLocalPath(mediaUrl: string): string {
  *   2. Single account → use it directly
  *   3. No match → throw a descriptive error
  */
-function resolveOutboundAccountId(cfg: OpenClawConfig, to: string): string {
+function resolveOutboundAccountId(
+  cfg: OpenClawConfig,
+  to: string,
+): string {
   const allIds = listWeixinAccountIds(cfg);
 
   if (allIds.length === 0) {
@@ -103,9 +85,7 @@ function resolveOutboundAccountId(cfg: OpenClawConfig, to: string): string {
   const matched = findAccountIdsByContextToken(allIds, to);
 
   if (matched.length === 1) {
-    logger.info(
-      `resolveOutboundAccountId: matched accountId=${matched[0]} for to=${to}`,
-    );
+    logger.info(`resolveOutboundAccountId: matched accountId=${matched[0]} for to=${to}`);
     return matched[0];
   }
 
@@ -115,15 +95,15 @@ function resolveOutboundAccountId(cfg: OpenClawConfig, to: string): string {
     );
     throw new Error(
       `weixin: ambiguous account for to=${to} ` +
-        `(${matched.length} accounts have active sessions with this recipient: ${matched.join(", ")}). ` +
-        `Specify accountId in the delivery config to disambiguate.`,
+      `(${matched.length} accounts have active sessions with this recipient: ${matched.join(", ")}). ` +
+      `Specify accountId in the delivery config to disambiguate.`,
     );
   }
 
   throw new Error(
     `weixin: cannot determine which account to use for to=${to} ` +
-      `(${allIds.length} accounts registered, none has an active session with this recipient). ` +
-      `Specify accountId in the delivery config, or ensure the recipient has recently messaged the bot.`,
+    `(${allIds.length} accounts registered, none has an active session with this recipient). ` +
+    `Specify accountId in the delivery config, or ensure the recipient has recently messaged the bot.`,
   );
 }
 
@@ -139,14 +119,10 @@ async function sendWeixinOutbound(params: {
   assertSessionActive(account.accountId);
   if (!account.configured) {
     aLog.error(`sendWeixinOutbound: account not configured`);
-    throw new Error(
-      "weixin not configured: please run `openclaw channels login --channel openclaw-weixin`",
-    );
+    throw new Error("weixin not configured: please run `openclaw channels login --channel openclaw-weixin`");
   }
   if (!params.contextToken) {
-    aLog.warn(
-      `sendWeixinOutbound: contextToken missing for to=${params.to}, sending without context`,
-    );
+    aLog.warn(`sendWeixinOutbound: contextToken missing for to=${params.to}, sending without context`);
   }
   const f = new StreamingMarkdownFilter();
   const rawText = params.text ?? "";
@@ -158,38 +134,21 @@ async function sendWeixinOutbound(params: {
     accountId: account.accountId,
   });
   if (sendingResult.cancelled) {
-    aLog.info(
-      `sendWeixinOutbound: cancelled by message_sending hook to=${params.to}`,
-    );
+    aLog.info(`sendWeixinOutbound: cancelled by message_sending hook to=${params.to}`);
     return { channel: "openclaw-weixin", messageId: "" };
   }
   filteredText = sendingResult.text;
 
   try {
-    const result = await sendMessageWeixin({
-      to: params.to,
-      text: filteredText,
-      opts: {
-        baseUrl: account.baseUrl,
-        token: account.token,
-        contextToken: params.contextToken,
-      },
-    });
-    emitWeixinMessageSent({
-      to: params.to,
-      content: filteredText,
-      success: true,
-      accountId: account.accountId,
-    });
+    const result = await sendMessageWeixin({ to: params.to, text: filteredText, opts: {
+      baseUrl: account.baseUrl,
+      token: account.token,
+      contextToken: params.contextToken,
+    }});
+    emitWeixinMessageSent({ to: params.to, content: filteredText, success: true, accountId: account.accountId });
     return { channel: "openclaw-weixin", messageId: result.messageId };
   } catch (err) {
-    emitWeixinMessageSent({
-      to: params.to,
-      content: filteredText,
-      success: false,
-      error: String(err),
-      accountId: account.accountId,
-    });
+    emitWeixinMessageSent({ to: params.to, content: filteredText, success: false, error: String(err), accountId: account.accountId });
     throw err;
   }
 }
@@ -228,8 +187,6 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
               requireMention: { type: "boolean" },
             },
           },
-          description:
-            "Per-group settings keyed by group ID; '*' is the default.",
         },
       },
     },
@@ -247,18 +204,22 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
   },
   messaging: {
     targetResolver: {
-      // Webox group IDs end with @chatroom; both forms are routable without directory lookup.
-      looksLikeId: (raw) =>
-        raw.endsWith("@im.wechat") || raw.endsWith("@chatroom"),
+      // Weixin user and Webox group IDs are already routable; skip directory lookup.
+      looksLikeId: (raw) => raw.endsWith("@im.wechat") || raw.endsWith("@chatroom"),
     },
   },
   groups: {
     resolveRequireMention: ({ cfg, accountId, groupId }) =>
-      resolveWeixinRequireMention({ cfg, accountId, groupId }),
+      resolveChannelGroupRequireMention({
+        cfg,
+        channel: "openclaw-weixin",
+        accountId,
+        groupId,
+      }),
   },
   agentPrompt: {
     messageToolHints: () => [
-      "To send an image or file to the current conversation, use the message tool with action='send' and set 'media' to a local file path or a remote URL. You do not need to specify 'to' — the current conversation recipient or group is used automatically.",
+      "To send an image or file to the current user, use the message tool with action='send' and set 'media' to a local file path or a remote URL. You do not need to specify 'to' — the current conversation recipient is used automatically.",
       "When the user asks you to find an image from the web, use a web search or browser tool to find a suitable image URL, then send it using the message tool with 'media' set to that HTTPS image URL — do NOT download the image first.",
       "IMPORTANT: When generating or saving a file to send, always use an absolute path (e.g. /tmp/photo.png), never a relative path like ./photo.png. Relative paths cannot be resolved and the file will not be delivered.",
       "IMPORTANT: When creating a cron job (scheduled task) for the current Weixin user, you MUST set delivery.to to the user's Weixin ID (the xxx@im.wechat address from the current conversation) AND set delivery.accountId to the current AccountId. Without an explicit 'to', the cron delivery will fail with 'requires target'. Without an explicit 'accountId', the message may be sent from the wrong bot account. Example: delivery: { mode: 'announce', channel: 'openclaw-weixin', to: '<current_user_id@im.wechat>', accountId: '<current_AccountId>' }.",
@@ -281,8 +242,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
     deliveryMode: "direct",
     textChunkLimit: 4000,
     sendText: async (ctx) => {
-      const accountId =
-        ctx.accountId || resolveOutboundAccountId(ctx.cfg, ctx.to);
+      const accountId = ctx.accountId || resolveOutboundAccountId(ctx.cfg, ctx.to);
       const result = await sendWeixinOutbound({
         cfg: ctx.cfg,
         to: ctx.to,
@@ -293,8 +253,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
       return result;
     },
     sendMedia: async (ctx) => {
-      const accountId =
-        ctx.accountId || resolveOutboundAccountId(ctx.cfg, ctx.to);
+      const accountId = ctx.accountId || resolveOutboundAccountId(ctx.cfg, ctx.to);
       const account = resolveWeixinAccount(ctx.cfg, accountId);
       const aLog = logger.withAccount(account.accountId);
       assertSessionActive(account.accountId);
@@ -326,13 +285,8 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           filePath = resolveLocalPath(mediaUrl);
           aLog.debug(`sendMedia: uploading local file ${filePath}`);
         } else {
-          aLog.debug(
-            `sendMedia: downloading remote mediaUrl=${mediaUrl.slice(0, 80)}...`,
-          );
-          filePath = await downloadRemoteImageToTemp(
-            mediaUrl,
-            MEDIA_OUTBOUND_TEMP_DIR,
-          );
+          aLog.debug(`sendMedia: downloading remote mediaUrl=${mediaUrl.slice(0, 80)}...`);
+          filePath = await downloadRemoteImageToTemp(mediaUrl, MEDIA_OUTBOUND_TEMP_DIR);
           aLog.debug(`sendMedia: remote image downloaded to ${filePath}`);
         }
         const contextToken = getContextToken(account.accountId, ctx.to);
@@ -341,58 +295,28 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
             filePath,
             to: ctx.to,
             text,
-            opts: {
-              baseUrl: account.baseUrl,
-              token: account.token,
-              contextToken,
-            },
+            opts: { baseUrl: account.baseUrl, token: account.token, contextToken },
             cdnBaseUrl: account.cdnBaseUrl,
           });
-          emitWeixinMessageSent({
-            to: ctx.to,
-            content: text,
-            success: true,
-            accountId: account.accountId,
-          });
+          emitWeixinMessageSent({ to: ctx.to, content: text, success: true, accountId: account.accountId });
           return { channel: "openclaw-weixin", messageId: result.messageId };
         } catch (err) {
-          emitWeixinMessageSent({
-            to: ctx.to,
-            content: text,
-            success: false,
-            error: String(err),
-            accountId: account.accountId,
-          });
+          emitWeixinMessageSent({ to: ctx.to, content: text, success: false, error: String(err), accountId: account.accountId });
           throw err;
         }
       }
 
       const contextToken = getContextToken(account.accountId, ctx.to);
       try {
-        const result = await sendMessageWeixin({
-          to: ctx.to,
-          text,
-          opts: {
-            baseUrl: account.baseUrl,
-            token: account.token,
-            contextToken,
-          },
-        });
-        emitWeixinMessageSent({
-          to: ctx.to,
-          content: text,
-          success: true,
-          accountId: account.accountId,
-        });
+        const result = await sendMessageWeixin({ to: ctx.to, text, opts: {
+          baseUrl: account.baseUrl,
+          token: account.token,
+          contextToken,
+        }});
+        emitWeixinMessageSent({ to: ctx.to, content: text, success: true, accountId: account.accountId });
         return { channel: "openclaw-weixin", messageId: result.messageId };
       } catch (err) {
-        emitWeixinMessageSent({
-          to: ctx.to,
-          content: text,
-          success: false,
-          error: String(err),
-          accountId: account.accountId,
-        });
+        emitWeixinMessageSent({ to: ctx.to, content: text, success: false, error: String(err), accountId: account.accountId });
         throw err;
       }
     },
@@ -469,11 +393,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           });
           registerWeixinAccountId(normalizedId);
           if (waitResult.userId) {
-            clearStaleAccountsForUserId(
-              normalizedId,
-              waitResult.userId,
-              clearContextTokensForAccount,
-            );
+            clearStaleAccountsForUserId(normalizedId, waitResult.userId, clearContextTokensForAccount);
           }
           void triggerWeixinChannelReload();
           log(`\n已将此 OpenClaw 连接到微信。`);
@@ -505,9 +425,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
     startAccount: async (ctx) => {
       logger.debug(`startAccount entry`);
       if (!ctx) {
-        logger.warn(
-          `gateway.startAccount: called with undefined ctx, skipping`,
-        );
+        logger.warn(`gateway.startAccount: called with undefined ctx, skipping`);
         return;
       }
       const account = ctx.account;
@@ -532,9 +450,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
         throw new Error("weixin not configured: missing token");
       }
 
-      ctx.log?.info?.(
-        `[${account.accountId}] starting weixin provider (${DEFAULT_BASE_URL})`,
-      );
+      ctx.log?.info?.(`[${account.accountId}] starting weixin provider (${DEFAULT_BASE_URL})`);
 
       try {
         const resp = await notifyStart({
@@ -545,9 +461,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           aLog.warn(`notifyStart: ret=${resp.ret} errmsg=${resp.errmsg ?? ""}`);
         }
       } catch (err) {
-        aLog.warn(
-          `notifyStart failed during startup (ignored): ${String(err)}`,
-        );
+        aLog.warn(`notifyStart failed during startup (ignored): ${String(err)}`);
       }
 
       const logPath = aLog.getLogFilePath();
@@ -572,8 +486,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
         accountId: account.accountId,
         config: ctx.cfg,
         runtime: ctx.runtime,
-        channelRuntime:
-          ctx.channelRuntime as unknown as PluginRuntime["channel"],
+        channelRuntime: ctx.channelRuntime as unknown as PluginRuntime["channel"],
         abortSignal: ctx.abortSignal,
         setStatus: ctx.setStatus,
       });
@@ -582,9 +495,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
       const account = ctx.account;
       const aLog = logger.withAccount(account.accountId);
       if (!account.configured || !account.token?.trim()) {
-        aLog.debug(
-          `gateway.stopAccount: skip notifyStop (not configured or no token)`,
-        );
+        aLog.debug(`gateway.stopAccount: skip notifyStop (not configured or no token)`);
         return;
       }
       try {
@@ -596,16 +507,12 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           aLog.warn(`notifyStop: ret=${resp.ret} errmsg=${resp.errmsg ?? ""}`);
         }
       } catch (err) {
-        aLog.warn(
-          `notifyStop failed during shutdown (ignored): ${String(err)}`,
-        );
+        aLog.warn(`notifyStop failed during shutdown (ignored): ${String(err)}`);
       }
     },
     loginWithQrStart: async ({ accountId, force, verbose }) => {
       // For re-login: use saved baseUrl from account data; fall back to default for new accounts.
-      const savedBaseUrl = accountId
-        ? loadWeixinAccount(accountId)?.baseUrl?.trim()
-        : "";
+      const savedBaseUrl = accountId ? loadWeixinAccount(accountId)?.baseUrl?.trim() : "";
       const result: WeixinQrStartResult = await startWeixinLoginWithQr({
         accountId: accountId ?? undefined,
         apiBaseUrl: savedBaseUrl || DEFAULT_BASE_URL,
@@ -622,10 +529,7 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
     },
     loginWithQrWait: async (params) => {
       // sessionKey is forwarded by the client after loginWithQrStart (runtime param extension).
-      const sessionKey =
-        (params as { sessionKey?: string }).sessionKey ||
-        params.accountId ||
-        "";
+      const sessionKey = (params as { sessionKey?: string }).sessionKey || params.accountId || "";
       const savedBaseUrl = params.accountId
         ? loadWeixinAccount(params.accountId)?.baseUrl?.trim()
         : "";
@@ -645,20 +549,12 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           });
           registerWeixinAccountId(normalizedId);
           if (result.userId) {
-            clearStaleAccountsForUserId(
-              normalizedId,
-              result.userId,
-              clearContextTokensForAccount,
-            );
+            clearStaleAccountsForUserId(normalizedId, result.userId, clearContextTokensForAccount);
           }
           triggerWeixinChannelReload();
-          logger.info(
-            `loginWithQrWait: saved account data for accountId=${normalizedId}`,
-          );
+          logger.info(`loginWithQrWait: saved account data for accountId=${normalizedId}`);
         } catch (err) {
-          logger.error(
-            `loginWithQrWait: failed to save account data err=${String(err)}`,
-          );
+          logger.error(`loginWithQrWait: failed to save account data err=${String(err)}`);
         }
       }
 

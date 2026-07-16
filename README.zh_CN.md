@@ -79,37 +79,6 @@ openclaw channels login --channel openclaw-weixin
 openclaw config set session.dmScope per-account-channel-peer
 ```
 
-## 群聊
-
-当 iLink 后端在 `getUpdates` 中提供 `group_id`（或以 `@chatroom` 结尾的
-`session_id`）时，插件支持群聊；Webox 会提供这些字段。插件将群成员保留为
-发送者身份，同时用群 ID 进行路由、会话记录、context token 缓存和回复，因而
-同一群的成员共享群会话，并与私聊会话隔离。
-
-Webox 会在消息进入插件前完成会话准入；群聊是否唤醒 Agent 则使用 OpenClaw
-标准的 mention gate。例如：
-
-```json
-{
-  "channels": {
-    "openclaw-weixin": {
-      "groups": {
-        "*": { "requireMention": true }
-      }
-    }
-  },
-  "messages": {
-    "groupChat": {
-      "mentionPatterns": ["虾虾"]
-    }
-  }
-}
-```
-
-`requireMention` 默认为 `true`。OpenClaw 使用 agent 或全局 mention pattern 匹配
-消息正文。公开 iLink 消息没有结构化的 @ 列表，因此应把机器人群昵称配置为文本
-pattern。插件不再额外维护群或发送者白名单。
-
 ## 自定义 BotAgent（可选）
 
 每条出站请求会带一个自我声明的 `bot_agent` 字段——类似 HTTP `User-Agent`——用于
