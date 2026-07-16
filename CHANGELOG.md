@@ -4,7 +4,7 @@
 
 This project follows the [Keep a Changelog](https://keepachangelog.com/) format.
 
-## [Unreleased]
+## [2.4.8] - 2026-07-16
 
 ### Added
 
@@ -14,6 +14,14 @@ This project follows the [Keep a Changelog](https://keepachangelog.com/) format.
 ### Security
 
 - Authorize plugin slash commands before executing them and avoid updating the direct-message last route from group traffic.
+
+## [2.4.7] - 2026-07-12
+
+### Changed
+
+- Published the fork as `@netcat-ai/openclaw-weixin`.
+- Added channel- and account-level `baseUrl` configuration for custom iLink backends; account configuration takes precedence over channel configuration and saved credentials.
+- QR login and QR refresh now use the resolved account base URL instead of the fixed Tencent endpoint.
 
 ## [2.4.5] - 2026-06-22
 
