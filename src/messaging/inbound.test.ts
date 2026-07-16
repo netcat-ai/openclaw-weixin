@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  isMediaItem,
-  weixinMessageToMsgContext,
-  getContextTokenFromMsgContext,
-} from "./inbound.js";
+import { isMediaItem, weixinMessageToMsgContext, getContextTokenFromMsgContext } from "./inbound.js";
 import type { WeixinMsgContext } from "./inbound.js";
 import { MessageItemType } from "../api/types.js";
 import type { WeixinMessage, MessageItem } from "../api/types.js";
@@ -89,7 +85,6 @@ describe("weixinMessageToMsgContext", () => {
   it("separates a group conversation from its member sender", () => {
     const msg: WeixinMessage = {
       from_user_id: "wxid-alice",
-      session_id: "family@chatroom",
       group_id: "family@chatroom",
       item_list: [{ type: MessageItemType.TEXT, text_item: { text: "hello group" } }],
       context_token: "group-context",
@@ -101,7 +96,6 @@ describe("weixinMessageToMsgContext", () => {
       To: "family@chatroom",
       OriginatingTo: "family@chatroom",
       ChatType: "group",
-      ConversationLabel: "family@chatroom",
       GroupSubject: "family@chatroom",
       SenderId: "wxid-alice",
       context_token: "group-context",
@@ -286,7 +280,6 @@ describe("weixinMessageToMsgContext", () => {
     const ctx = weixinMessageToMsgContext(msg, "acc");
     expect(ctx.Body).toBe("");
   });
-
 });
 
 describe("getContextTokenFromMsgContext", () => {

@@ -28,7 +28,6 @@ import {
   weixinMessageToMsgContext,
   getContextTokenFromMsgContext,
   isMediaItem,
-  resolveWeixinConversation,
 } from "./inbound.js";
 import type { WeixinInboundMediaOpts } from "./inbound.js";
 import { sendWeixinMediaFile } from "./send-media.js";
@@ -83,12 +82,15 @@ export async function processOneMessage(
   const debug = isDebugMode(deps.accountId);
   const debugTrace: string[] = [];
   const debugTs: Record<string, number> = { received: receivedAt };
-  const conversation = resolveWeixinConversation(full);
+  const groupId = full.group_id;
+  const senderId = full.from_user_id ?? "";
+  const isGroup = Boolean(groupId);
+  const to = groupId || senderId;
 
   const textBody = extractTextBody(full.item_list);
-  if (textBody.startsWith("/")) {
+  if (!isGroup && textBody.startsWith("/")) {
     const slashResult = await handleSlashCommand(textBody, {
-      to: conversation.targetId,
+      to,
       contextToken: full.context_token,
       baseUrl: deps.baseUrl,
       token: deps.token,
@@ -171,13 +173,11 @@ export async function processOneMessage(
   const rawBody = ctx.Body?.trim() ?? "";
   ctx.CommandBody = rawBody;
 
-  const senderId = conversation.senderId;
-
   const { senderAllowedForCommands, commandAuthorized } =
     await resolveSenderCommandAuthorizationWithRuntime({
       cfg: deps.config,
       rawBody,
-      isGroup: conversation.isGroup,
+      isGroup,
       dmPolicy: "pairing",
       configuredAllowFrom: [],
       configuredGroupAllowFrom: [],
@@ -194,7 +194,7 @@ export async function processOneMessage(
     });
 
   const directDmOutcome = resolveDirectDmAuthorizationOutcome({
-    isGroup: conversation.isGroup,
+    isGroup,
     dmPolicy: "pairing",
     senderAllowedForCommands,
   });
@@ -222,18 +222,8 @@ export async function processOneMessage(
     cfg: deps.config,
     channel: "openclaw-weixin",
     accountId: deps.accountId,
-    peer: { kind: conversation.peerKind, id: conversation.targetId },
+    peer: { kind: isGroup ? "group" : "direct", id: to },
   });
-  if (conversation.isGroup) {
-    const mentionRegexes = deps.channelRuntime.mentions.buildMentionRegexes(
-      deps.config,
-      route.agentId,
-    );
-    ctx.WasMentioned = deps.channelRuntime.mentions.matchesMentionPatterns(
-      rawBody,
-      mentionRegexes,
-    );
-  }
   logger.debug(
     `resolveAgentRoute: agentId=${route.agentId ?? "(none)"} sessionKey=${route.sessionKey ?? "(none)"} mainSessionKey=${route.mainSessionKey ?? "(none)"}`,
   );
@@ -265,12 +255,11 @@ export async function processOneMessage(
   );
   logger.debug(`inbound context: ${redactBody(JSON.stringify(finalized))}`);
 
-  let sessionMetaTask: Promise<unknown> | undefined;
   await deps.channelRuntime.session.recordInboundSession({
     storePath,
     sessionKey: route.sessionKey,
     ctx: finalized as Parameters<typeof deps.channelRuntime.session.recordInboundSession>[0]["ctx"],
-    ...(conversation.isGroup
+    ...(isGroup
       ? {}
       : {
           updateLastRoute: {
@@ -281,20 +270,14 @@ export async function processOneMessage(
           },
         }),
     onRecordError: (err) => deps.errLog(`recordInboundSession: ${String(err)}`),
-    trackSessionMetaTask: (task) => {
-      sessionMetaTask = task;
-    },
   });
-  if (!conversation.isGroup) {
-    await sessionMetaTask;
-  }
   logger.debug(
     `recordInboundSession: done storePath=${storePath} sessionKey=${route.sessionKey ?? "(none)"}`,
   );
 
   const contextToken = getContextTokenFromMsgContext(ctx);
   if (contextToken) {
-    setContextToken(deps.accountId, conversation.targetId, contextToken);
+    setContextToken(deps.accountId, to, contextToken);
   }
   const runId = randomUUID();
   const replyProgressSender = resolveReplyProgressMessagesEnabled(deps.config)
@@ -311,7 +294,7 @@ export async function processOneMessage(
     : undefined;
   const humanDelay = deps.channelRuntime.reply.resolveHumanDelayConfig(deps.config, route.agentId);
 
-  const hasTypingTicket = !conversation.isGroup && Boolean(deps.typingTicket);
+  const hasTypingTicket = !isGroup && Boolean(deps.typingTicket);
   const typingCallbacks = createTypingCallbacks({
     start: hasTypingTicket
       ? () =>

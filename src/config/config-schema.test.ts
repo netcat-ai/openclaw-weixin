@@ -45,13 +45,6 @@ describe("WeixinConfigSchema", () => {
     expect(result.accounts?.acc2?.name).toBe("Bot 2");
   });
 
-  it("accepts OpenClaw group mention rules", () => {
-    const result = WeixinConfigSchema.parse({
-      groups: { "family@chatroom": { requireMention: true } },
-    });
-    expect(result.groups?.["family@chatroom"]?.requireMention).toBe(true);
-  });
-
   it("rejects invalid types", () => {
     expect(() => WeixinConfigSchema.parse({ enabled: "yes" })).toThrow();
   });

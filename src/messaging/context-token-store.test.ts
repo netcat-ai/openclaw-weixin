@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import fs from "node:fs";
 import { setContextToken, getContextToken } from "./inbound.js";
 
 vi.mock("../util/logger.js", () => ({
@@ -33,17 +32,4 @@ describe("context-token-store", () => {
     expect(getContextToken("acc", "userA")).toBe("tokenA");
     expect(getContextToken("acc", "userB")).toBe("tokenB");
   });
-
-  it("stores group reply context by conversation id", () => {
-    setContextToken("acc", "family@chatroom", "group-token");
-    expect(getContextToken("acc", "family@chatroom")).toBe("group-token");
-    expect(getContextToken("acc", "wxid-member")).toBeUndefined();
-  });
-
-  it("keeps the in-memory token when persistence fails", () => {
-    vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => { throw new Error("disk unavailable"); });
-    setContextToken("acc-disk", "user", "token-memory");
-    expect(getContextToken("acc-disk", "user")).toBe("token-memory");
-  });
-
 });

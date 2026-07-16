@@ -3,7 +3,6 @@ import path from "node:path";
 import type { ChannelPlugin, OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk/core";
 import { normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import { resolvePreferredOpenClawTmpDir } from "openclaw/plugin-sdk/infra-runtime";
-import { resolveChannelGroupRequireMention } from "openclaw/plugin-sdk/channel-policy";
 
 import {
   registerWeixinAccountId,
@@ -178,16 +177,6 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
           default: true,
           description: "Send structured tool-call progress messages.",
         },
-        groups: {
-          type: "object",
-          additionalProperties: {
-            type: "object",
-            additionalProperties: true,
-            properties: {
-              requireMention: { type: "boolean" },
-            },
-          },
-        },
       },
     },
   },
@@ -207,15 +196,6 @@ export const weixinPlugin: ChannelPlugin<ResolvedWeixinAccount> = {
       // Weixin user and Webox group IDs are already routable; skip directory lookup.
       looksLikeId: (raw) => raw.endsWith("@im.wechat") || raw.endsWith("@chatroom"),
     },
-  },
-  groups: {
-    resolveRequireMention: ({ cfg, accountId, groupId }) =>
-      resolveChannelGroupRequireMention({
-        cfg,
-        channel: "openclaw-weixin",
-        accountId,
-        groupId,
-      }),
   },
   agentPrompt: {
     messageToolHints: () => [
